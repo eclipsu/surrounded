@@ -11,7 +11,7 @@ export interface Room {
 interface RoomRecord {
   capacity: number;
   hostName: string;
-  participantCount: number;
+  sessions: Set<string>;
   createdAt: number;
 }
 
@@ -22,7 +22,7 @@ export function createRoom(hostName: string, capacity: number): Room {
   const record: RoomRecord = {
     capacity,
     hostName,
-    participantCount: 0,
+    sessions: new Set(),
     createdAt: Date.now(),
   };
   rooms.set(id, record);
@@ -35,29 +35,37 @@ export function getRoom(id: string): Room | null {
   return toPublicRoom(id, record);
 }
 
-export function joinRoom(id: string): { room: Room } | { error: string } {
+export function joinRoom(
+  id: string,
+  sessionId: string
+): { room: Room } | { error: string } {
   const record = rooms.get(id);
   if (!record) return { error: "Room not found" };
-  if (record.participantCount >= record.capacity) {
+
+  if (record.sessions.has(sessionId)) {
+    return { room: toPublicRoom(id, record) };
+  }
+
+  if (record.sessions.size >= record.capacity) {
     return { error: "Room is full" };
   }
-  record.participantCount += 1;
+
+  record.sessions.add(sessionId);
   return { room: toPublicRoom(id, record) };
 }
 
-export function leaveRoom(id: string): void {
+export function leaveSession(id: string, sessionId: string): Room | null {
   const record = rooms.get(id);
-  if (!record) return;
-  record.participantCount = Math.max(0, record.participantCount - 1);
-  if (record.participantCount === 0) {
-    rooms.delete(id);
-  }
+  if (!record) return null;
+
+  record.sessions.delete(sessionId);
+  return toPublicRoom(id, record);
 }
 
 export function listRooms(): Room[] {
-  return Array.from(rooms.entries()).map(([id, record]) =>
-    toPublicRoom(id, record)
-  );
+  return Array.from(rooms.entries())
+    .filter(([, record]) => record.sessions.size > 0)
+    .map(([id, record]) => toPublicRoom(id, record));
 }
 
 function toPublicRoom(id: string, record: RoomRecord): Room {
@@ -65,7 +73,7 @@ function toPublicRoom(id: string, record: RoomRecord): Room {
     id,
     capacity: record.capacity,
     hostName: record.hostName,
-    participantCount: record.participantCount,
+    participantCount: record.sessions.size,
     createdAt: record.createdAt,
   };
 }

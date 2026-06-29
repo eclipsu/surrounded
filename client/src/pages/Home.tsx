@@ -81,7 +81,7 @@ export default function Home({ displayName, onNameChange }: Props) {
         </form>
       </div>
 
-      {rooms.length > 0 && (
+      {rooms.some((room) => room.participantCount > 0) && (
         <>
           <hr className="divider" />
           <h2 style={{ fontSize: "1.125rem", margin: "0 0 0.5rem" }}>
@@ -89,17 +89,19 @@ export default function Home({ displayName, onNameChange }: Props) {
           </h2>
           <p className="muted">Multiple rooms can run at the same time.</p>
           <ul className="room-list">
-            {rooms.map((room) => (
-              <li key={room.id}>
-                <div>
-                  <strong>{room.hostName}&apos;s room</strong>
-                  <div className="muted">
-                    {room.participantCount}/{room.capacity} · ID {room.id}
+            {rooms
+              .filter((room) => room.participantCount > 0)
+              .map((room) => (
+                <li key={room.id}>
+                  <div>
+                    <strong>{room.hostName}&apos;s room</strong>
+                    <div className="muted">
+                      {room.participantCount}/{room.capacity} · ID {room.id}
+                    </div>
                   </div>
-                </div>
-                <a href={`/room/${room.id}`}>Join</a>
-              </li>
-            ))}
+                  <a href={`/room/${room.id}`}>Join</a>
+                </li>
+              ))}
           </ul>
         </>
       )}

@@ -1,5 +1,7 @@
 node_modules/
 dist/
+certs/
+livekit.yaml
 *.tsbuildinfo
 .env
 .env.local

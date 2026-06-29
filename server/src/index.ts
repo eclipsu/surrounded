@@ -4,33 +4,67 @@ import express from "express";
 import { createServer } from "http";
 import { Server } from "socket.io";
 import { randomUUID } from "crypto";
-import { createLiveKitToken, getLiveKitUrl } from "./livekit.js";
+import { createLiveKitToken, getLiveKitUrl, getAppUrl, getPublicHost } from "./livekit.js";
 import {
   createRoom,
   getRoom,
   joinRoom,
-  leaveRoom,
+  leaveSession,
   listRooms,
 } from "./rooms.js";
 
 const PORT = Number(process.env.PORT ?? 3001);
-const CLIENT_URL = process.env.CLIENT_URL ?? "http://localhost:5173";
+const CLIENT_URLS = (process.env.CLIENT_URL ?? "http://localhost:5173")
+  .split(",")
+  .map((s) => s.trim());
+
+const LAN_ORIGIN =
+  /^https?:\/\/(localhost|127\.0\.0\.1|192\.168\.\d{1,3}\.\d{1,3}|10\.\d{1,3}\.\d{1,3}\.\d{1,3}|172\.(1[6-9]|2\d|3[01])\.\d{1,3}\.\d{1,3})(:\d+)?$/;
+
+function isAllowedOrigin(origin: string | undefined): boolean {
+  if (!origin) return true;
+  if (CLIENT_URLS.includes(origin)) return true;
+  if (process.env.NODE_ENV !== "production" && LAN_ORIGIN.test(origin)) {
+    return true;
+  }
+  return false;
+}
+
+const corsOptions = {
+  origin: (
+    origin: string | undefined,
+    callback: (err: Error | null, allow?: boolean) => void
+  ) => {
+    callback(null, isAllowedOrigin(origin));
+  },
+};
 
 const app = express();
 const httpServer = createServer(app);
 const io = new Server(httpServer, {
-  cors: { origin: CLIENT_URL, methods: ["GET", "POST"] },
+  cors: { ...corsOptions, methods: ["GET", "POST"] },
 });
 
-app.use(cors({ origin: CLIENT_URL }));
+app.use(cors(corsOptions));
 app.use(express.json());
 
-app.get("/api/health", (_req, res) => {
-  res.json({ ok: true });
+app.get("/api/health", async (_req, res) => {
+  let livekit = false;
+  try {
+    const r = await fetch("http://127.0.0.1:7880/");
+    livekit = r.ok;
+  } catch {
+    livekit = false;
+  }
+  res.json({ ok: true, livekit });
 });
 
-app.get("/api/config", (_req, res) => {
-  res.json({ livekitUrl: getLiveKitUrl() });
+app.get("/api/config", (req, res) => {
+  res.json({
+    livekitUrl: getLiveKitUrl(req),
+    appUrl: getAppUrl(req),
+    publicHost: getPublicHost(req),
+  });
 });
 
 app.post("/api/rooms", (req, res) => {
@@ -71,14 +105,22 @@ app.get("/api/rooms/:roomId", (req, res) => {
 });
 
 app.post("/api/rooms/:roomId/join", async (req, res) => {
-  const { participantName } = req.body as { participantName?: string };
+  const { participantName, sessionId } = req.body as {
+    participantName?: string;
+    sessionId?: string;
+  };
 
   if (!participantName?.trim()) {
     res.status(400).json({ error: "participantName is required" });
     return;
   }
 
-  const result = joinRoom(req.params.roomId);
+  if (!sessionId?.trim()) {
+    res.status(400).json({ error: "sessionId is required" });
+    return;
+  }
+
+  const result = joinRoom(req.params.roomId, sessionId.trim());
   if ("error" in result) {
     res.status(result.error === "Room not found" ? 404 : 403).json({
       error: result.error,
@@ -97,8 +139,26 @@ app.post("/api/rooms/:roomId/join", async (req, res) => {
     room: result.room,
     token,
     participantId,
-    livekitUrl: getLiveKitUrl(),
+    livekitUrl: getLiveKitUrl(req),
   });
+});
+
+app.post("/api/rooms/:roomId/leave", (req, res) => {
+  const { sessionId } = req.body as { sessionId?: string };
+
+  if (!sessionId?.trim()) {
+    res.status(400).json({ error: "sessionId is required" });
+    return;
+  }
+
+  const room = leaveSession(req.params.roomId, sessionId.trim());
+  if (!room) {
+    res.status(404).json({ error: "Room not found" });
+    return;
+  }
+
+  io.to(req.params.roomId).emit("room-update", { room });
+  res.json({ room });
 });
 
 const socketRooms = new Map<string, Set<string>>();
@@ -121,36 +181,22 @@ io.on("connection", (socket) => {
     socketRooms.get(roomId)!.add(socket.id);
 
     const room = getRoom(roomId);
-    io.to(roomId).emit("room-update", { room });
-  });
-
-  socket.on("leave-room", () => {
-    if (!currentRoomId) return;
-
-    socket.leave(currentRoomId);
-    socketRooms.get(currentRoomId)?.delete(socket.id);
-
-    leaveRoom(currentRoomId);
-    const room = getRoom(currentRoomId);
     if (room) {
-      io.to(currentRoomId).emit("room-update", { room });
+      io.to(roomId).emit("room-update", { room });
     }
-
-    currentRoomId = null;
   });
 
   socket.on("disconnect", () => {
     if (!currentRoomId) return;
 
     socketRooms.get(currentRoomId)?.delete(socket.id);
-    leaveRoom(currentRoomId);
-    const room = getRoom(currentRoomId);
-    if (room) {
-      io.to(currentRoomId).emit("room-update", { room });
-    }
+    currentRoomId = null;
   });
 });
 
-httpServer.listen(PORT, () => {
+httpServer.listen(PORT, "0.0.0.0", () => {
   console.log(`Server running on http://localhost:${PORT}`);
+  if (CLIENT_URLS[0] && !CLIENT_URLS[0].includes("localhost")) {
+    console.log(`LAN clients: ${CLIENT_URLS[0].replace(/:\d+$/, `:${PORT}`)} (API)`);
+  }
 });

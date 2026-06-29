@@ -168,9 +168,32 @@ h1 {
 }
 
 .video-grid {
+  width: 100%;
+}
+
+.video-grid .lk-grid-layout {
+  width: 100%;
+  min-height: 240px;
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
   gap: 1rem;
+}
+
+.lk-participant-tile {
+  aspect-ratio: 4 / 3;
+  min-height: 180px;
+  border-radius: var(--radius);
+  overflow: hidden;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+}
+
+.lk-participant-tile video,
+.lk-participant-tile .lk-video-track {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
 }
 
 .video-tile {

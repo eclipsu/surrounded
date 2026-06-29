@@ -1,8 +1,8 @@
 services:
   livekit:
     image: livekit/livekit-server:latest
-    command: --dev --bind 0.0.0.0
-    ports:
-      - "7880:7880"
-      - "7881:7881"
-      - "7882:7882/udp"
+    network_mode: host
+    volumes:
+      - ./livekit.yaml:/livekit.yaml:ro
+    # Signaling proxied via Vite (:5173/rtc). Media is direct UDP to rtc.node_ip in livekit.yaml.
+    command: --dev --config /livekit.yaml

@@ -113,23 +113,135 @@ Foundation for multi-room voice/video chat:
 - [x] Join via link and talk (LiveKit audio/video)
 - [x] Multiple rooms can exist simultaneously
 
-### Run locally
+---
+
+## Getting Started
+
+### Prerequisites
+
+| Requirement | Notes |
+|---|---|
+| **Node.js 18+** | `node -v` |
+| **Docker** | For LiveKit only (`docker compose`) |
+| **npm** | Installed with Node |
+
+Clone and install once:
 
 ```bash
-# 1. Start LiveKit
-docker compose up livekit -d
-
-# 2. Install deps
+git clone <repo-url> circle
+cd circle
 npm install
+cp .env.example server/.env   # optional — defaults work for local dev
+```
 
-# 3. Copy env (optional — defaults work with docker dev LiveKit)
-cp .env.example server/.env
+---
 
-# 4. Start app
+### Option A — Laptop only (quickest)
+
+Use this to test in two browser tabs on the same machine.
+
+```bash
+# Terminal 1 — LiveKit (use sudo if Docker needs it)
+npm run livekit
+
+# Terminal 2 — app
 npm run dev
 ```
 
-Open http://localhost:5173 — enter your name, create a room, copy the invite link, open it in another tab/browser to test.
+1. Open **http://localhost:5173**
+2. Enter your display name
+3. **Create a room** → copy the invite link
+4. Open the invite link in a **second tab** (use a different name)
+5. On **both** tabs: click **Enable camera & mic**
+6. You should see video tiles and hear audio between tabs
+
+---
+
+### Option B — Phone + laptop (same Wi‑Fi)
+
+Browsers block camera/mic on `http://10.x.x.x` — you need HTTPS on your LAN IP.
+
+```bash
+npm run dev:lan
+```
+
+This script will:
+
+1. Generate self-signed TLS certs (with your Wi‑Fi IP in the SAN)
+2. Write `livekit.yaml` with your LAN IP for WebRTC (`rtc.node_ip`)
+3. Recreate the LiveKit Docker container
+4. Start the dev server over HTTPS
+
+**Use only the URL printed in the terminal**, e.g.:
+
+```
+https://10.0.0.238:5173
+```
+
+| Do | Don't |
+|---|---|
+| Open the printed `https://10.x.x.x:5173` on laptop **and** phone | Use `http://` on a LAN IP |
+| Accept the certificate warning on **each** device | Use `172.x.x.x` URLs (Docker bridge, not Wi‑Fi) |
+| Join the **same room** and click **Enable camera & mic** on both | Open `:7880` directly in the browser |
+
+**Firewall** (if media doesn't flow — signaling works but no audio/video):
+
+```bash
+sudo ufw allow 5173/tcp              # App HTTPS + LiveKit signaling (proxied)
+sudo ufw allow 7882/udp              # LiveKit ICE
+sudo ufw allow 50000:60000/udp       # LiveKit media ports
+```
+
+WebRTC media goes **directly** to LiveKit on UDP — it does not pass through the Vite proxy.
+
+---
+
+### Useful commands
+
+| Command | What it does |
+|---|---|
+| `npm run dev` | Start server + client (localhost HTTP) |
+| `npm run dev:lan` | HTTPS on LAN IP + regenerate certs & LiveKit config |
+| `npm run livekit` | Write `livekit.yaml` and start/recreate LiveKit container |
+| `npm run gen-certs` | Regenerate self-signed certs in `certs/` |
+| `npm run gen-livekit` | Regenerate `livekit.yaml` only (no Docker) |
+
+Check LiveKit is running:
+
+```bash
+curl http://127.0.0.1:7880          # should return HTTP 200
+sudo docker compose logs livekit --tail 20
+cat livekit.yaml | grep node_ip     # LAN IP when using dev:lan, 127.0.0.1 for laptop-only
+```
+
+---
+
+### Troubleshooting
+
+**"Connecting to voice/video…" forever**
+
+- LiveKit isn't running → `npm run livekit`
+- Wrong URL → use `localhost:5173` or the `https://10.x.x.x:5173` URL from `dev:lan`, not `:7880`
+
+**Camera light on but no video / no audio**
+
+- LiveKit ICE is using the wrong IP → run `npm run dev:lan` (or `npm run livekit` with `PUBLIC_HOST=10.x.x.x`)
+- Firewall blocking UDP → open `7882/udp` and `50000:60000/udp`
+- Only one participant → voice needs **two** people in the room; you should still see your own video after enabling camera
+
+**`yaml: field tls not found` in Docker logs**
+
+- Old container with a stale config → `sudo docker compose down livekit && npm run livekit`
+
+**Wrong address warning (172.x.x.x)**
+
+- You opened a Docker bridge IP. Use the `https://10.x.x.x:5173` URL from `npm run dev:lan`.
+
+**`getUserMedia` / camera not available**
+
+- On LAN you must use HTTPS (`npm run dev:lan`), not plain `http://10.x.x.x`.
+
+---
 
 ## Next Steps
 
