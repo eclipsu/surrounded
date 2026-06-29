@@ -103,6 +103,34 @@ To ship something testable fast, cut scope to:
 - [ ] Clip/export feature — this might be the single highest-leverage feature for actually getting shared on Twitter
 - [ ] Max ring size — visually, how many tiles can a circle hold before it looks bad / how do we degrade gracefully at scale (the "19 people" case)?
 
+## Phase 1 (current)
+
+Foundation for multi-room voice/video chat:
+
+- [x] Ask user's display name (stored locally)
+- [x] Create a room with configurable capacity
+- [x] Shareable invite link (`/room/:id`)
+- [x] Join via link and talk (LiveKit audio/video)
+- [x] Multiple rooms can exist simultaneously
+
+### Run locally
+
+```bash
+# 1. Start LiveKit
+docker compose up livekit -d
+
+# 2. Install deps
+npm install
+
+# 3. Copy env (optional — defaults work with docker dev LiveKit)
+cp .env.example server/.env
+
+# 4. Start app
+npm run dev
+```
+
+Open http://localhost:5173 — enter your name, create a room, copy the invite link, open it in another tab/browser to test.
+
 ## Next Steps
 
 1. Lock MVP scope (above) and ring size
